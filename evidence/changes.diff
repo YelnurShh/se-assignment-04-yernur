@@ -1,0 +1,426 @@
+--- baseline/AGENTS.md
++++ project/AGENTS.md
+@@ -1,22 +0,0 @@
+-# Project
+-Smart Campus room availability checker with one visible room, fictional bookings and a fixed clock.
+-
+-## Constraints
+-Preserve AC1 to AC6: reject invalid or past intervals, durations above 120 minutes, blocked rooms and overlaps. Allow touching endpoints. Never mutate bookings. Preserve desktop and mobile feedback.
+-Do not add login, backend, database, saved bookings or unrelated features.
+-
+-## Structure
+-src/components contains the UI. src/lib contains booking logic and time helpers. tests contains executable Node regression tests.
+-
+-## Engineering rules
+-Use pure functions and the smallest justified module boundary. Use at most two justified patterns. Do not add Strategy without multiple real policies, Adapter without multiple real formats, or unnecessary classes.
+-Keep public function signatures and existing messages stable. Never weaken existing assertions.
+-
+-## Verification
+-Use Node 24 or later.
+-node --import ./tests/register.mjs --test --test-reporter=tap tests/improved.test.mjs tests/practice9.test.mjs
+-npm run typecheck
+-npm run build
+-Check the existing UI on desktop and at 390 pixels wide.
+-Report changed files, rationale, actual test counts and any unverified checks.
+-Explicitly read this file before editing; do not claim automatic loading.
+--- baseline/package.json
++++ project/package.json
+@@ -9,8 +9,9 @@
+     "lint": "eslint .",
+     "preview": "vite preview",
+     "typecheck": "tsc --noEmit -p tsconfig.app.json",
+-    "test": "node --import ./tests/register.mjs --test tests/improved.test.mjs tests/practice9.test.mjs",
+-    "test:first": "node --import ./tests/register.mjs --test tests/first.test.mjs"
++    "test": "node --import ./tests/register.mjs --test tests/improved.test.mjs tests/practice9.test.mjs tests/assignment4.test.mjs",
++    "test:first": "node --import ./tests/register.mjs --test tests/first.test.mjs",
++    "test:ui": "node tests/ui.mjs"
+   },
+   "dependencies": {
+     "@supabase/supabase-js": "^2.57.4",
+@@ -33,8 +34,5 @@
+     "typescript": "^5.5.3",
+     "typescript-eslint": "^8.3.0",
+     "vite": "^5.4.2"
+-  },
+-  "engines": {
+-    "node": ">=24"
+   }
+ }
+--- baseline/src/App.tsx
++++ project/src/App.tsx
+@@ -9,8 +9,10 @@
+   Search,
+   RotateCcw,
+ } from 'lucide-react';
+-import { ROOMS, DEFAULT_CURRENT_TIME, type Room } from '@/config/rooms';
+-import { checkAvailability, formatTime, type CheckResult } from '@/lib/booking';
++import { DEFAULT_CURRENT_TIME } from '@/config/rooms';
++import { evaluateAvailability, formatTime, type CheckResult } from '@/lib/booking';
++import { CATALOG, EQUIPMENT } from '@/config/catalog';
++import { filterRooms } from '@/lib/roomFilters';
+ import { RoomSelector } from '@/components/RoomSelector';
+ import { TimeField } from '@/components/TimeField';
+ import { Timeline } from '@/components/Timeline';
+@@ -25,34 +27,29 @@
+ }
+ 
+ export default function App() {
+-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(ROOMS[0]);
++  const [selectedId, setSelectedId] = useState(CATALOG[0].id);
++  const [attendees, setAttendees] = useState('1');
++  const [equipment, setEquipment] = useState<string[]>([]);
++  const matches = filterRooms(CATALOG, Number(attendees), equipment);
++  const selectedRoom = matches.find(room => room.id === selectedId) ?? matches[0];
+   const [startRaw, setStartRaw] = useState('');
+   const [endRaw, setEndRaw] = useState('');
+-  const [currentTimeRaw, setCurrentTimeRaw] = useState(String(DEFAULT_CURRENT_TIME));
+   const [result, setResult] = useState<CheckResult | null>(null);
+ 
+   const startNum = parseMinutes(startRaw);
+   const endNum = parseMinutes(endRaw);
+-  const currentTimeNum = parseMinutes(currentTimeRaw) ?? DEFAULT_CURRENT_TIME;
+-
+-  // Inline validation feedback for the time fields
+-  const startError = startRaw !== '' && startNum === null ? 'Enter a whole number' : null;
+-  const endError = endRaw !== '' && endNum === null ? 'Enter a whole number' : null;
+-  const currentTimeError =
+-    currentTimeRaw !== '' && parseMinutes(currentTimeRaw) === null
+-      ? 'Enter a whole number'
+-      : null;
+-
+-  const canCheck =
+-    selectedRoom !== null &&
+-    startNum !== null &&
+-    endNum !== null &&
+-    parseMinutes(currentTimeRaw) !== null;
++  const currentTimeNum = DEFAULT_CURRENT_TIME;
++  const wholeNumberError = (raw: string, parsed: number | null) =>
++    raw !== '' && parsed === null ? 'Enter a whole number' : null;
++  const startError = wholeNumberError(startRaw, startNum);
++  const endError = wholeNumberError(endRaw, endNum);
++  const canCheck = Boolean(selectedRoom) && startNum !== null && endNum !== null;
+ 
+   function handleCheck() {
+     if (!selectedRoom || startNum === null || endNum === null) return;
+     setResult(
+-      checkAvailability(
++      evaluateAvailability(
++        selectedRoom.bookings,
+         selectedRoom.id,
+         selectedRoom.blocked,
+         startNum,
+@@ -63,10 +60,9 @@
+   }
+ 
+   function handleReset() {
+-    setSelectedRoom(ROOMS[0]);
++    setSelectedId(matches[0]?.id ?? '');
+     setStartRaw('');
+     setEndRaw('');
+-    setCurrentTimeRaw(String(DEFAULT_CURRENT_TIME));
+     setResult(null);
+   }
+ 
+@@ -105,14 +101,24 @@
+               </span>
+               <h2 className="text-base font-semibold text-ink-700">Select a Room</h2>
+             </div>
+-            <RoomSelector selectedId={selectedRoom?.id ?? null} onSelect={setSelectedRoom} />
+-            <label className="mt-3 flex items-center gap-2 text-sm">
+-              <input type="checkbox" checked={selectedRoom?.blocked ?? false} onChange={(event) => {
+-                setSelectedRoom((room) => room ? { ...room, blocked: event.target.checked } : room);
+-                setResult(null);
+-              }} />
+-              Blocked room test fixture
+-            </label>
++            <div className="mb-4 space-y-2 rounded-xl border border-slate-200 bg-white p-4">
++              <label className="block">Attendees
++                <input className="ml-3 w-24 rounded border border-slate-300 p-1" type="number" min="1" step="1"
++                  value={attendees} onChange={e => { setAttendees(e.target.value); setResult(null); }} />
++              </label>
++              <fieldset className="flex flex-wrap gap-3">
++                <legend>Required equipment</legend>
++                {EQUIPMENT.map(item => <label className="inline-flex items-center gap-2" key={item}>
++                  <input type="checkbox" checked={equipment.includes(item)} onChange={() => {
++                    setEquipment(list => list.includes(item) ? list.filter(value => value !== item) : [...list, item]);
++                    setResult(null);
++                  }} />{item}
++                </label>)}
++              </fieldset>
++            </div>
++            {matches.length ? <RoomSelector rooms={matches} selectedId={selectedRoom?.id ?? null}
++              onSelect={room => { setSelectedId(room.id); setResult(null); }} /> :
++              <p role="status">No rooms match. Change the attendee count or required equipment.</p>}
+           </section>
+ 
+           {/* Step 2: Enter times */}
+@@ -131,28 +137,7 @@
+                 <span className="text-sm text-ink-700">
+                   Current time:
+                 </span>
+-                <input
+-                  type="number"
+-                  inputMode="numeric"
+-                  min={0}
+-                  max={1440}
+-                  step={1}
+-                  aria-label="Current time in minutes after midnight"
+-                  value={currentTimeRaw}
+-                  onChange={(e) => {
+-                    setCurrentTimeRaw(e.target.value);
+-                    setResult(null);
+-                  }}
+-                  className="w-20 rounded-md border border-amber-300 px-2 py-1 font-mono text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-amber-300"
+-                />
+-                <span className="text-xs text-ink-500">
+-                  min ({formatTime(currentTimeNum)})
+-                </span>
+-                {currentTimeError && (
+-                  <span className="ml-auto text-xs text-red-500 font-medium">
+-                    {currentTimeError}
+-                  </span>
+-                )}
++                <span className="text-xs text-ink-500">{currentTimeNum} min ({formatTime(currentTimeNum)})</span>
+               </div>
+ 
+               {/* Start & End */}
+@@ -240,7 +225,7 @@
+           {selectedRoom && (
+             <section className="animate-fade-in">
+               <Timeline
+-                roomId={selectedRoom.id}
++                roomBookings={selectedRoom.bookings}
+                 candidateStart={startNum}
+                 candidateEnd={endNum}
+                 currentTime={currentTimeNum}
+@@ -249,7 +234,7 @@
+           )}
+ 
+           {/* Result */}
+-          <section>
++          <section aria-live="polite" data-testid={result ? "availability-result" : undefined}>
+             <ResultCard result={result} start={startNum} end={endNum} />
+           </section>
+ 
+--- baseline/src/components/RoomSelector.tsx
++++ project/src/components/RoomSelector.tsx
+@@ -8,7 +8,7 @@
+   Users,
+   type LucideIcon,
+ } from 'lucide-react';
+-import { ROOMS, type Room } from '@/config/rooms';
++import type { CatalogRoom } from '@/config/catalog';
+ 
+ const ICON_MAP: Record<string, LucideIcon> = {
+   School,
+@@ -19,20 +19,22 @@
+ };
+ 
+ interface RoomSelectorProps {
++  rooms: readonly CatalogRoom[];
+   selectedId: string | null;
+-  onSelect: (room: Room) => void;
++  onSelect: (room: CatalogRoom) => void;
+ }
+ 
+-export function RoomSelector({ selectedId, onSelect }: RoomSelectorProps) {
++export function RoomSelector({ rooms, selectedId, onSelect }: RoomSelectorProps) {
+   return (
+     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+-      {ROOMS.filter((room) => room.id === 'watson-101').map((room) => {
++      {rooms.map((room) => {
+         const Icon = ICON_MAP[room.icon] ?? School;
+         const isSelected = room.id === selectedId;
+         return (
+           <button
+             key={room.id}
+             type="button"
++            aria-pressed={isSelected}
+             onClick={() => onSelect(room)}
+             className={[
+               'group relative flex items-center gap-3 rounded-xl border-2 p-4 text-left transition-all duration-200',
+@@ -71,6 +73,7 @@
+                   {room.capacity}
+                 </span>
+               </div>
++              <div className="text-xs text-ink-500">{room.equipment.join(", ")}</div>
+             </div>
+           </button>
+         );
+@@ -79,5 +82,3 @@
+   );
+ }
+ 
+-// Re-export to satisfy potential external use; prevents unused-import lint noise
+-export type { Room };
+--- baseline/src/components/Timeline.tsx
++++ project/src/components/Timeline.tsx
+@@ -1,9 +1,8 @@
+-import { useMemo } from 'react';
+-import { BOOKINGS, DAY_MINUTES } from '@/config/rooms';
++import { DAY_MINUTES, type Booking } from '@/config/rooms';
+ import { formatTime } from '@/lib/booking';
+ 
+ interface TimelineProps {
+-  roomId: string | null;
++  roomBookings: readonly Booking[];
+   candidateStart: number | null;
+   candidateEnd: number | null;
+   currentTime: number;
+@@ -11,12 +10,7 @@
+ 
+ const HOUR_MARKS = Array.from({ length: 25 }, (_, i) => i); // 0..24
+ 
+-export function Timeline({ roomId, candidateStart, candidateEnd, currentTime }: TimelineProps) {
+-  const roomBookings = useMemo(
+-    () => BOOKINGS.filter((b) => b.roomId === roomId),
+-    [roomId],
+-  );
+-
++export function Timeline({ roomBookings, candidateStart, candidateEnd, currentTime }: TimelineProps) {
+   const pct = (min: number) => `${(min / DAY_MINUTES) * 100}%`;
+ 
+   return (
+--- baseline/src/config/catalog.ts
++++ project/src/config/catalog.ts
+@@ -0,0 +1,21 @@
++import { ROOMS, BOOKINGS, type Room, type Booking } from './rooms';
++
++export type CatalogRoom = Room & { equipment: readonly string[]; bookings: readonly Booking[] };
++export const EQUIPMENT = ['Display', 'Whiteboard', 'Lab computers'] as const;
++const equipmentByRoom: Record<string, readonly string[]> = {
++  'watson-101': ['Display', 'Whiteboard'],
++  'kepler-220': ['Display', 'Lab computers'],
++  'thoreau-015': ['Whiteboard'],
++  'einstein-330': ['Display', 'Whiteboard', 'Lab computers'],
++  'darwin-105': ['Lab computers'],
++};
++const extraBookings: Booking[] = [
++  { id: 'kepler-seminar', roomId: 'kepler-220', title: 'Science Seminar', start: 720, end: 780 },
++  { id: 'darwin-study', roomId: 'darwin-105', title: 'Biology Study Group', start: 780, end: 840 },
++];
++const allBookings = [...BOOKINGS, ...extraBookings];
++export const CATALOG: readonly CatalogRoom[] = ROOMS.map(room => ({
++  ...room,
++  equipment: equipmentByRoom[room.id],
++  bookings: allBookings.filter(booking => booking.roomId === room.id),
++}));
+--- baseline/src/lib/roomFilters.ts
++++ project/src/lib/roomFilters.ts
+@@ -0,0 +1,9 @@
++type MatchableRoom = { capacity: number; equipment: readonly string[] };
++
++export function filterRooms<T extends MatchableRoom>(
++  rooms: readonly T[], attendees: number, required: readonly string[],
++): T[] {
++  if (!Number.isSafeInteger(attendees) || attendees < 1) return [];
++  return rooms.filter(room => room.capacity >= attendees &&
++    required.every(item => room.equipment.includes(item)));
++}
+--- baseline/tests/assignment4.test.mjs
++++ project/tests/assignment4.test.mjs
+@@ -0,0 +1,45 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { CATALOG, EQUIPMENT } from '../src/config/catalog.ts';
++import { filterRooms } from '../src/lib/roomFilters.ts';
++import { evaluateAvailability } from '../src/lib/booking.ts';
++const check = (room, start, end) => evaluateAvailability(room.bookings, room.id, room.blocked, start, end, 540);
++
++const base = CATALOG[0];
++const other = CATALOG.find(r => r.id === 'darwin-105');
++const blocked = CATALOG.find(r => r.blocked);
++test('F1 exact capacity is included', () => assert.ok(filterRooms(CATALOG, base.capacity, []).includes(base)));
++test('F1 capacity one seat short is excluded', () => assert.ok(!filterRooms(CATALOG, base.capacity+1, []).includes(base)));
++test('F2 all required items must be present', () => {
++ const found = filterRooms(CATALOG, 1, [EQUIPMENT[0], EQUIPMENT[1]]);
++ assert.ok(found.includes(base));
++ assert.ok(!found.includes(other));
++ assert.ok(found.every(r => r.equipment.includes(EQUIPMENT[0]) && r.equipment.includes(EQUIPMENT[1])));
++});
++test('F3 blocked match remains visible and cannot be available', () => {
++ assert.ok(filterRooms(CATALOG, 1, []).includes(blocked));
++ assert.equal(check(blocked, 900, 960).available, false);
++});
++test('F4 no eligible rooms yields an empty list', () => assert.deepEqual(filterRooms(CATALOG, 1000, []), []));
++test('invalid attendees are not silently rounded or defaulted', () => {
++ for (const count of [0, -1, 1.5, NaN, Infinity]) assert.deepEqual(filterRooms(CATALOG, count, []), []);
++});
++test('chosen room supplies the booking data', () => {
++ assert.equal(check(base, 600, 660).available, false);
++ assert.equal(check(other, 600, 660).available, true);
++});
++test('catalog booking lists survive repeated checks and filtering', () => {
++ const saved = structuredClone(CATALOG);
++ for (const room of filterRooms(CATALOG, 1, [])) { check(room, 600, 660); check(room, 900, 960); }
++ assert.deepEqual(CATALOG, saved);
++});
++test('catalog has unique ids, complete equipment and distinct booking arrays', () => {
++ assert.ok(CATALOG.length >= 4);
++ assert.equal(new Set(CATALOG.map(r => r.id)).size, CATALOG.length);
++ assert.equal(new Set(CATALOG.map(r => r.bookings)).size, CATALOG.length);
++ for (const room of CATALOG) assert.ok(room.name && room.equipment.length && room.bookings.length);
++});
++test('120 is accepted and 121 rejected in a free evening slot', () => {
++ assert.equal(check(base, 1080, 1200).available, true);
++ assert.equal(check(base, 1080, 1201).available, false);
++});
+--- baseline/tests/ui.mjs
++++ project/tests/ui.mjs
+@@ -0,0 +1,56 @@
++import assert from 'node:assert/strict';
++import { createServer } from 'node:http';
++import { readFile, mkdir } from 'node:fs/promises';
++import { resolve, extname, sep } from 'node:path';
++const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
++const root = resolve('dist'), photos = process.env.UI_EVIDENCE_DIR;
++if (photos) await mkdir(photos,{recursive:true});
++const server=createServer(async(req,res)=>{
++ const path=new URL(req.url,'http://localhost').pathname;
++ const file=resolve(root,'.'+(path==='/'?'/index.html':path));
++ if(!file.startsWith(root+sep))return res.writeHead(403).end();
++ try{const data=await readFile(file);res.writeHead(200,{'content-type':{'.js':'text/javascript','.html':'text/html','.css':'text/css'}[extname(file)]||'application/octet-stream'}).end(data);}
++ catch{res.writeHead(404).end();}
++});
++await new Promise((ok,fail)=>{server.once('error',fail);server.listen(0,'127.0.0.1',ok);});
++let browser;
++try {
++ browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined});
++ const page=await browser.newPage({viewport:{width:1280,height:850}});
++ const errors=[];page.on('pageerror',e=>errors.push(e.message));
++ await page.goto('http://127.0.0.1:'+server.address().port);
++ const shot=async name=>{if(photos)await page.screenshot({path:resolve(photos,name+'.png'),fullPage:true});};
++ const y=false;
++ const choose=(id,name)=>y?page.getByRole('combobox').selectOption(id):page.getByRole('button',{name:new RegExp(name)}).click();
++ const check=()=>page.getByRole('button',{name:'Check Availability'}).click();
++ const result=page.getByTestId('availability-result');
++ const setTime=async (a,b)=>{await page.locator('#start-time').fill(a);await page.locator('#end-time').fill(b);};
++ await setTime(y?'10:00':'600',y?'11:00':'660');
++ await check();assert.match(await result.innerText(),/Unavailable/i);
++ await choose(y?'room-204':'darwin-105',y?'Room 204':'Darwin 105');
++ assert.equal(await result.count(),0);await check();assert.match(await result.innerText(),/\bAvailable\b/);await shot('01-room-switch');
++ console.log('PASS F5: selecting another room cleared feedback and changed the result for the same interval.');
++ const required=y?['Projector','Whiteboard']:['Display','Whiteboard'];
++ await page.getByLabel('Attendees').fill(y?'30':'40');
++ for(const item of required)await page.getByLabel(item,{exact:true}).check();
++ if(y)assert.deepEqual(await page.getByRole('combobox').locator('option').evaluateAll(xs=>xs.map(x=>x.value)),['room-101']);
++ else {assert.equal(await page.getByRole('button',{name:/Watson 101/}).count(),1);assert.equal(await page.getByRole('button',{name:/Einstein 330|Thoreau 015|Darwin 105|Kepler 220/}).count(),0);}
++ assert.equal(await result.count(),0);await shot('02-exact-capacity-and-equipment');
++ console.log('PASS F1/F2: exact capacity and both required items; only the matching room is shown.');
++ await page.getByLabel('Attendees').fill('1000');
++ assert.match(await page.getByRole('status').innerText(),/No rooms match/);
++ const button=page.getByRole('button',{name:'Check Availability'});
++ if(await button.count())assert.equal(await button.isEnabled(),false);
++ assert.equal(await result.count(),0);await shot('03-empty-state');
++ console.log('PASS F4: no matches, no old result, and no enabled check.');
++ await page.getByLabel('Attendees').fill('1');
++ for(const item of required)await page.getByLabel(item,{exact:true}).uncheck();
++ await choose(y?'room-307':'kepler-220',y?'Room 307':'Kepler 220');
++ await setTime(y?'15:00':'900',y?'16:00':'960');await check();
++ assert.match(await result.innerText(),/blocked/i);await shot('04-blocked-room');
++ console.log('PASS F3: blocked room rejected in an otherwise free interval.');
++ await page.setViewportSize({width:390,height:844});
++ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),390);
++ assert.match(await result.innerText(),/blocked/i);assert.deepEqual(errors,[]);await shot('05-mobile');
++ console.log('PASS AC6: 390 px layout with feedback, no horizontal overflow or uncaught errors.');
++} finally {await browser?.close();await new Promise(ok=>server.close(ok));}

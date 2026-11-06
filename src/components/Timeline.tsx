@@ -1,9 +1,8 @@
-import { useMemo } from 'react';
-import { BOOKINGS, DAY_MINUTES } from '@/config/rooms';
+import { DAY_MINUTES, type Booking } from '@/config/rooms';
 import { formatTime } from '@/lib/booking';
 
 interface TimelineProps {
-  roomId: string | null;
+  roomBookings: readonly Booking[];
   candidateStart: number | null;
   candidateEnd: number | null;
   currentTime: number;
@@ -11,12 +10,7 @@ interface TimelineProps {
 
 const HOUR_MARKS = Array.from({ length: 25 }, (_, i) => i); // 0..24
 
-export function Timeline({ roomId, candidateStart, candidateEnd, currentTime }: TimelineProps) {
-  const roomBookings = useMemo(
-    () => BOOKINGS.filter((b) => b.roomId === roomId),
-    [roomId],
-  );
-
+export function Timeline({ roomBookings, candidateStart, candidateEnd, currentTime }: TimelineProps) {
   const pct = (min: number) => `${(min / DAY_MINUTES) * 100}%`;
 
   return (

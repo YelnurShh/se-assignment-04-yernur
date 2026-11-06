@@ -8,7 +8,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { ROOMS, type Room } from '@/config/rooms';
+import type { CatalogRoom } from '@/config/catalog';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   School,
@@ -19,20 +19,22 @@ const ICON_MAP: Record<string, LucideIcon> = {
 };
 
 interface RoomSelectorProps {
+  rooms: readonly CatalogRoom[];
   selectedId: string | null;
-  onSelect: (room: Room) => void;
+  onSelect: (room: CatalogRoom) => void;
 }
 
-export function RoomSelector({ selectedId, onSelect }: RoomSelectorProps) {
+export function RoomSelector({ rooms, selectedId, onSelect }: RoomSelectorProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {ROOMS.filter((room) => room.id === 'watson-101').map((room) => {
+      {rooms.map((room) => {
         const Icon = ICON_MAP[room.icon] ?? School;
         const isSelected = room.id === selectedId;
         return (
           <button
             key={room.id}
             type="button"
+            aria-pressed={isSelected}
             onClick={() => onSelect(room)}
             className={[
               'group relative flex items-center gap-3 rounded-xl border-2 p-4 text-left transition-all duration-200',
@@ -71,6 +73,7 @@ export function RoomSelector({ selectedId, onSelect }: RoomSelectorProps) {
                   {room.capacity}
                 </span>
               </div>
+              <div className="text-xs text-ink-500">{room.equipment.join(", ")}</div>
             </div>
           </button>
         );
@@ -79,5 +82,3 @@ export function RoomSelector({ selectedId, onSelect }: RoomSelectorProps) {
   );
 }
 
-// Re-export to satisfy potential external use; prevents unused-import lint noise
-export type { Room };

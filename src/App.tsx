@@ -9,8 +9,10 @@ import {
   Search,
   RotateCcw,
 } from 'lucide-react';
-import { ROOMS, DEFAULT_CURRENT_TIME, type Room } from '@/config/rooms';
-import { checkAvailability, formatTime, type CheckResult } from '@/lib/booking';
+import { DEFAULT_CURRENT_TIME } from '@/config/rooms';
+import { evaluateAvailability, formatTime, type CheckResult } from '@/lib/booking';
+import { CATALOG, EQUIPMENT } from '@/config/catalog';
+import { filterRooms } from '@/lib/roomFilters';
 import { RoomSelector } from '@/components/RoomSelector';
 import { TimeField } from '@/components/TimeField';
 import { Timeline } from '@/components/Timeline';
@@ -25,34 +27,29 @@ function parseMinutes(raw: string): number | null {
 }
 
 export default function App() {
-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(ROOMS[0]);
+  const [selectedId, setSelectedId] = useState(CATALOG[0].id);
+  const [attendees, setAttendees] = useState('1');
+  const [equipment, setEquipment] = useState<string[]>([]);
+  const matches = filterRooms(CATALOG, Number(attendees), equipment);
+  const selectedRoom = matches.find(room => room.id === selectedId) ?? matches[0];
   const [startRaw, setStartRaw] = useState('');
   const [endRaw, setEndRaw] = useState('');
-  const [currentTimeRaw, setCurrentTimeRaw] = useState(String(DEFAULT_CURRENT_TIME));
   const [result, setResult] = useState<CheckResult | null>(null);
 
   const startNum = parseMinutes(startRaw);
   const endNum = parseMinutes(endRaw);
-  const currentTimeNum = parseMinutes(currentTimeRaw) ?? DEFAULT_CURRENT_TIME;
-
-  // Inline validation feedback for the time fields
-  const startError = startRaw !== '' && startNum === null ? 'Enter a whole number' : null;
-  const endError = endRaw !== '' && endNum === null ? 'Enter a whole number' : null;
-  const currentTimeError =
-    currentTimeRaw !== '' && parseMinutes(currentTimeRaw) === null
-      ? 'Enter a whole number'
-      : null;
-
-  const canCheck =
-    selectedRoom !== null &&
-    startNum !== null &&
-    endNum !== null &&
-    parseMinutes(currentTimeRaw) !== null;
+  const currentTimeNum = DEFAULT_CURRENT_TIME;
+  const wholeNumberError = (raw: string, parsed: number | null) =>
+    raw !== '' && parsed === null ? 'Enter a whole number' : null;
+  const startError = wholeNumberError(startRaw, startNum);
+  const endError = wholeNumberError(endRaw, endNum);
+  const canCheck = Boolean(selectedRoom) && startNum !== null && endNum !== null;
 
   function handleCheck() {
     if (!selectedRoom || startNum === null || endNum === null) return;
     setResult(
-      checkAvailability(
+      evaluateAvailability(
+        selectedRoom.bookings,
         selectedRoom.id,
         selectedRoom.blocked,
         startNum,
@@ -63,10 +60,9 @@ export default function App() {
   }
 
   function handleReset() {
-    setSelectedRoom(ROOMS[0]);
+    setSelectedId(matches[0]?.id ?? '');
     setStartRaw('');
     setEndRaw('');
-    setCurrentTimeRaw(String(DEFAULT_CURRENT_TIME));
     setResult(null);
   }
 
@@ -105,14 +101,24 @@ export default function App() {
               </span>
               <h2 className="text-base font-semibold text-ink-700">Select a Room</h2>
             </div>
-            <RoomSelector selectedId={selectedRoom?.id ?? null} onSelect={setSelectedRoom} />
-            <label className="mt-3 flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={selectedRoom?.blocked ?? false} onChange={(event) => {
-                setSelectedRoom((room) => room ? { ...room, blocked: event.target.checked } : room);
-                setResult(null);
-              }} />
-              Blocked room test fixture
-            </label>
+            <div className="mb-4 space-y-2 rounded-xl border border-slate-200 bg-white p-4">
+              <label className="block">Attendees
+                <input className="ml-3 w-24 rounded border border-slate-300 p-1" type="number" min="1" step="1"
+                  value={attendees} onChange={e => { setAttendees(e.target.value); setResult(null); }} />
+              </label>
+              <fieldset className="flex flex-wrap gap-3">
+                <legend>Required equipment</legend>
+                {EQUIPMENT.map(item => <label className="inline-flex items-center gap-2" key={item}>
+                  <input type="checkbox" checked={equipment.includes(item)} onChange={() => {
+                    setEquipment(list => list.includes(item) ? list.filter(value => value !== item) : [...list, item]);
+                    setResult(null);
+                  }} />{item}
+                </label>)}
+              </fieldset>
+            </div>
+            {matches.length ? <RoomSelector rooms={matches} selectedId={selectedRoom?.id ?? null}
+              onSelect={room => { setSelectedId(room.id); setResult(null); }} /> :
+              <p role="status">No rooms match. Change the attendee count or required equipment.</p>}
           </section>
 
           {/* Step 2: Enter times */}
@@ -131,28 +137,7 @@ export default function App() {
                 <span className="text-sm text-ink-700">
                   Current time:
                 </span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  max={1440}
-                  step={1}
-                  aria-label="Current time in minutes after midnight"
-                  value={currentTimeRaw}
-                  onChange={(e) => {
-                    setCurrentTimeRaw(e.target.value);
-                    setResult(null);
-                  }}
-                  className="w-20 rounded-md border border-amber-300 px-2 py-1 font-mono text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                />
-                <span className="text-xs text-ink-500">
-                  min ({formatTime(currentTimeNum)})
-                </span>
-                {currentTimeError && (
-                  <span className="ml-auto text-xs text-red-500 font-medium">
-                    {currentTimeError}
-                  </span>
-                )}
+                <span className="text-xs text-ink-500">{currentTimeNum} min ({formatTime(currentTimeNum)})</span>
               </div>
 
               {/* Start & End */}
@@ -240,7 +225,7 @@ export default function App() {
           {selectedRoom && (
             <section className="animate-fade-in">
               <Timeline
-                roomId={selectedRoom.id}
+                roomBookings={selectedRoom.bookings}
                 candidateStart={startNum}
                 candidateEnd={endNum}
                 currentTime={currentTimeNum}
@@ -249,7 +234,7 @@ export default function App() {
           )}
 
           {/* Result */}
-          <section>
+          <section aria-live="polite" data-testid={result ? "availability-result" : undefined}>
             <ResultCard result={result} start={startNum} end={endNum} />
           </section>
 

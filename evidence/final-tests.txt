@@ -1,0 +1,50 @@
+Command: npm test
+
+> vite-react-typescript-starter@0.0.0 test
+> node --import ./tests/register.mjs --test tests/improved.test.mjs tests/practice9.test.mjs tests/assignment4.test.mjs
+
+(node:37671) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ F1 exact capacity is included (0.761625ms)
+✔ F1 capacity one seat short is excluded (0.106208ms)
+✔ F2 all required items must be present (0.123ms)
+✔ F3 blocked match remains visible and cannot be available (0.803125ms)
+✔ F4 no eligible rooms yields an empty list (0.529375ms)
+✔ invalid attendees are not silently rounded or defaulted (0.106375ms)
+✔ chosen room supplies the booking data (0.151917ms)
+✔ catalog booking lists survive repeated checks and filtering (0.317458ms)
+✔ catalog has unique ids, complete equipment and distinct booking arrays (0.149917ms)
+✔ 120 is accepted and 121 rejected in a free evening slot (0.163541ms)
+(node:37672) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ T01 - Starts exactly when existing booking ends (1.116541ms)
+✔ T02 - Start equals current time (0.186125ms)
+✔ T03 - Start and end are equal (0.15775ms)
+✔ T04 - End is before start (0.142292ms)
+✔ T05 - End exceeds day boundary (0.215166ms)
+✔ T06 - Duration exactly 120 minutes (0.165958ms)
+✔ T07 - Duration exceeds 120 minutes (0.425041ms)
+✔ T08 - Ends exactly when existing booking starts (0.130791ms)
+✔ T09 - Partially overlaps existing booking (0.172166ms)
+✔ T10 - Requested interval contains existing booking (0.532375ms)
+✔ T11 - Requested interval lies inside existing booking (0.204625ms)
+✔ T12 - Requested interval matches existing booking (0.108667ms)
+✔ T13 - Blocked room rejects valid interval (0.085083ms)
+✔ T14 - Valid interval with empty bookings (0.607917ms)
+✔ T15 - Data preservation for available and unavailable paths (0.214ms)
+✔ T16 - Start one minute after current time is valid (0.081375ms)
+✔ T17 - Conflict with second Watson booking preserves complete booking data and order (0.171958ms)
+✔ T18 - Fractional start and NaN end are rejected (0.147ms)
+✔ T19 - formatTime distinguishes midnight from noon (0.18ms)
+(node:37673) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ P9 pure core accepts frozen independent booking fixtures (1.341625ms)
+✔ P9 independent datasets do not require mutating global bookings (0.18625ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 128.000417
