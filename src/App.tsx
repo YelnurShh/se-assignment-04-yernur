@@ -9,7 +9,7 @@ import {
   Search,
   RotateCcw,
 } from 'lucide-react';
-import { ROOMS, DEFAULT_CURRENT_TIME, type Room } from '@/config/rooms';
+import { ROOMS, DAY_MINUTES, DEFAULT_CURRENT_TIME, type Room } from '@/config/rooms';
 import { checkAvailability, formatTime, type CheckResult } from '@/lib/booking';
 import { RoomSelector } from '@/components/RoomSelector';
 import { TimeField } from '@/components/TimeField';
@@ -33,24 +33,26 @@ export default function App() {
 
   const startNum = parseMinutes(startRaw);
   const endNum = parseMinutes(endRaw);
-  const currentTimeNum = parseMinutes(currentTimeRaw) ?? DEFAULT_CURRENT_TIME;
+  const currentTimeNum = parseMinutes(currentTimeRaw);
+  const validCurrentTime =
+    currentTimeNum !== null && currentTimeNum >= 0 && currentTimeNum <= DAY_MINUTES;
 
   // Inline validation feedback for the time fields
   const startError = startRaw !== '' && startNum === null ? 'Enter a whole number' : null;
   const endError = endRaw !== '' && endNum === null ? 'Enter a whole number' : null;
   const currentTimeError =
-    currentTimeRaw !== '' && parseMinutes(currentTimeRaw) === null
-      ? 'Enter a whole number'
+    currentTimeRaw !== '' && !validCurrentTime
+      ? `Enter a whole number from 0 to ${DAY_MINUTES}`
       : null;
 
   const canCheck =
     selectedRoom !== null &&
     startNum !== null &&
     endNum !== null &&
-    parseMinutes(currentTimeRaw) !== null;
+    validCurrentTime;
 
   function handleCheck() {
-    if (!selectedRoom || startNum === null || endNum === null) return;
+    if (!selectedRoom || startNum === null || endNum === null || !validCurrentTime) return;
     setResult(
       checkAvailability(
         selectedRoom.id,
@@ -60,6 +62,12 @@ export default function App() {
         currentTimeNum,
       ),
     );
+  }
+
+  function handleRoomSelect(room: Room) {
+    if (room.id === selectedRoom?.id) return;
+    setSelectedRoom(room);
+    setResult(null);
   }
 
   function handleReset() {
@@ -105,7 +113,7 @@ export default function App() {
               </span>
               <h2 className="text-base font-semibold text-ink-700">Select a Room</h2>
             </div>
-            <RoomSelector selectedId={selectedRoom?.id ?? null} onSelect={setSelectedRoom} />
+            <RoomSelector selectedId={selectedRoom?.id ?? null} onSelect={handleRoomSelect} />
             <label className="mt-3 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={selectedRoom?.blocked ?? false} onChange={(event) => {
                 setSelectedRoom((room) => room ? { ...room, blocked: event.target.checked } : room);
@@ -135,7 +143,7 @@ export default function App() {
                   type="number"
                   inputMode="numeric"
                   min={0}
-                  max={1440}
+                  max={DAY_MINUTES}
                   step={1}
                   aria-label="Current time in minutes after midnight"
                   value={currentTimeRaw}
@@ -146,7 +154,7 @@ export default function App() {
                   className="w-20 rounded-md border border-amber-300 px-2 py-1 font-mono text-sm text-ink-900 focus:outline-none focus:ring-2 focus:ring-amber-300"
                 />
                 <span className="text-xs text-ink-500">
-                  min ({formatTime(currentTimeNum)})
+                  min {validCurrentTime && `(${formatTime(currentTimeNum)})`}
                 </span>
                 {currentTimeError && (
                   <span className="ml-auto text-xs text-red-500 font-medium">
@@ -243,7 +251,7 @@ export default function App() {
                 roomId={selectedRoom.id}
                 candidateStart={startNum}
                 candidateEnd={endNum}
-                currentTime={currentTimeNum}
+                currentTime={validCurrentTime ? currentTimeNum : DEFAULT_CURRENT_TIME}
               />
             </section>
           )}
